@@ -1,0 +1,21 @@
+[project]
+name = "spacer"
+description = "Python interface to forums.space.com"
+authors = [
+    { name = "Max Paulus"}
+]
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3.11"
+]
+#license = {text = "MIT"}
+dependencies = ["requests", "urllib3", "beautifulsoup4"]
+dynamic = ["version"]
+requires-python = ">=3.8"
+
+[build-system]
+build-backend = 'setuptools.build_meta'
+requires = ["setuptools>=45"]
+
+[tool.setuptools]
+packages = ["spacer"]
