@@ -145,6 +145,7 @@ class BaseSpacer:
 
     def __init__(self, params=None):
         self.params = params
+        self.session = _get_requests_session()
 
     def _add_params(self, argument, new_params):
         if self.params is None:
@@ -165,7 +166,7 @@ class BaseSpacer:
         return url
         
     def _get_from_url(self, url):
-        results = _get_requests_session().get(url, auth=SpacerAuth(config))
+        results = self.session.get(url, auth=SpacerAuth(config))
         results.raise_for_status()
         return Results(results, self.__class__.__name__.lower())
 
