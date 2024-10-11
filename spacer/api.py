@@ -1,3 +1,4 @@
+import re
 import requests
 
 from datetime import datetime
@@ -5,6 +6,8 @@ from datetime import datetime
 from requests.auth import AuthBase
 from urllib3.util import Retry
 from bs4 import BeautifulSoup
+
+from spacer import models
 
 
 class SpacerConfig(dict):
@@ -21,6 +24,7 @@ config = SpacerConfig(
     max_retries=0,
     retry_backoff_factor=0.1,
     retry_http_codes=[429, 500, 503],
+    persist=True
 )
 
 
@@ -102,29 +106,87 @@ class Results:
         entity_class (str): Specifies whether to extract 'posts' or 'threads' from the page.
     """
 
-    def __init__(self, results, entity_class):
+    def __init__(self, results, entity_class, params):
         self.content = results.content
         self.url = results.url
         self.entity_class = entity_class
+        self.params = params
 
-    def _parse_datetime(self, dt_str):
+    def _parse_datetime_post(self, dt_str):
         date_format = '%b %d, %Y at %I:%M %p'
         return datetime.strptime(dt_str, date_format)
+    
+    def _parse_datetime_user(self, dt_str):
+        date_format = '%b %d, %Y'
+        return datetime.strptime(dt_str, date_format)
+    
+    def _count_likes(self, reactions):
+        match = re.match(r'^(.*?)(?:\s+and\s+(.+))?$', reactions)
+        x = len(match.group(1).split(','))
+        y = 0
+        if match.group(2):
+            match2 = re.match('^([0-9]+) others', match.group(2))
+            y = int(match2.group(1)) if match2 else 1
+        return x + y
+    
+    def _clean_text(self, text):
+        clean_text = text.replace('\n', '')
+        return clean_text
+        
+    def _extract_user_data_from_message(self, message):
+        user_meta1 = message.find('div', class_="message-userDetails")
+        user_meta2 = user_meta1.find('a', class_='username')
+        id = user_meta2['data-user-id']
+        username = user_meta2.text
+        role = ', '.join([t.text for t in user_meta1.select('[itemprop="jobTitle"]')])
 
-    def _extract_posts(self, soup):
-        boxes = soup.find_all("div", class_="message-userContent lbContainer js-lbContainer")
+        user_data1 = message.find('div', class_='message-userExtras')
+        user_data2 = user_data1.find_all('dd')
+        join_date = self._parse_datetime_user(user_data2[0].text)
+        messages = user_data2[1].text
+        reaction_score = user_data2[2].text
+        points = user_data2[3].text
+
+        user_data = {
+            'id': id,
+            'username': username,
+            'role': role,
+            'join_date': join_date,
+            'messages': messages,
+            'reaction_score': reaction_score,
+            'points': points
+        }
+
+        return user_data
+
+    def _extract_posts_and_users(self, soup):
+        messages = soup.find_all("div", class_="message-inner")
         posts = []
-        for box in boxes:
-            meta = box['data-lb-caption-desc'].split(' · ')
-            post = box.text
-            posts.append(
-                {
-                    'user': meta[0],
-                    'time': self._parse_datetime(meta[1]),
-                    'post': post
-                }
-            )
-        return posts
+        users = []
+        for message in messages:
+
+            user = self._extract_user_data_from_message(message)
+
+            post_box = message.find("div", class_="message-userContent lbContainer js-lbContainer")
+
+            id = post_box['data-lb-id'].split('-')[1]
+            meta = post_box['data-lb-caption-desc'].split(' · ')
+            post_text = post_box.text
+
+            reactions = message.find('a', class_="reactionsBar-link")
+
+            post = {
+                'id': id,
+                'user_id': user['id'],
+                'username': meta[0],
+                'thread': self.params['title'],
+                'message': self._clean_text(post_text),
+                'likes': self._count_likes(reactions.text) if reactions else 0,
+                'time_posted': self._parse_datetime_post(meta[1]),
+            }
+            posts.append(post)
+            users.append(user)
+        return posts, users
     
     def _extract_threads(self, soup):
         tags = soup.find_all("div", class_="structItem-title")
@@ -134,7 +196,12 @@ class Results:
     def extract(self):
         soup =  BeautifulSoup(self.content, "html.parser")
         if self.entity_class == 'posts':
-            return self._extract_posts(soup)
+            posts, users = self._extract_posts_and_users(soup)
+            if config.persist:
+                for post, user in zip(posts, users):
+                    models.Post.create_or_update(**post)
+                    models.User.create_or_update(**user)
+            return posts, users
         if self.entity_class == 'threads':
             return self._extract_threads(soup)
         else:
@@ -168,7 +235,7 @@ class BaseSpacer:
     def _get_from_url(self, url):
         results = self.session.get(url, auth=SpacerAuth(config))
         results.raise_for_status()
-        return Results(results, self.__class__.__name__.lower())
+        return Results(results, self.__class__.__name__.lower(), self.params)
 
     def get(self, title, page=1):
         self._add_params("page", page)
