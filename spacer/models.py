@@ -42,13 +42,16 @@ class Post(BaseModel):
 
 def get_posts_by_thread(thread):
     return Post.select().where(Post.thread == thread)
-    
-def get_user_by_name(username):
-    # might be multiple
-    return User.select().where(User.username == username)
+
+def get_all_posts():
+    return Post.select()
 
 def get_all_users():
     return User.select()
+
+def get_user_by_name(username):
+    # might be multiple
+    return User.select().where(User.username == username)
 
 # Schema management functions
 def create_tables():
