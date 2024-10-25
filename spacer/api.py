@@ -67,6 +67,7 @@ class Paginator:
         self.n_max = n_max
 
         self._next_page = page
+        self._previous_url = ''
 
     def __iter__(self):
         self.n = 0
@@ -83,13 +84,9 @@ class Paginator:
 
         results = self.entity_class.get(self.title, self._next_page)
 
-        # first page has no page endpoint
-        if self._next_page == 1:
-            returned_page = 1
-        else:
-            returned_page = int(results.url.split('-')[-1])
-        if returned_page == self._next_page:
+        if self._previous_url != results.url:
             self._next_page += 1
+            self._previous_url = results.url
             return results
         else:
             # when page doesn't exist, last existing is shown: don't return
@@ -130,8 +127,9 @@ class Results:
         return x + y
     
     def _clean_text(self, text):
-        clean_text = text.replace('\n', '')
-        return clean_text
+        # replace multiple consecutive chars (\s,\n,\t)
+        clean_text = re.sub(r'\s+', ' ', text)
+        return clean_text.strip()
         
     def _extract_user_data_from_message(self, message):
         user_meta1 = message.find('div', class_="message-userDetails")
@@ -171,8 +169,9 @@ class Results:
 
             id = post_box['data-lb-id'].split('-')[1]
             meta = post_box['data-lb-caption-desc'].split(' · ')
-            post_text = post_box.text
 
+            post_body = post_box.find("div", class_="bbWrapper")
+            post_text = ' '.join([(e if not e.name else (e.text if e.name != 'blockquote' else '')) for e in post_body])  # skips blockquote
             reactions = message.find('a', class_="reactionsBar-link")
 
             post = {
