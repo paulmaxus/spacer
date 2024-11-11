@@ -242,28 +242,32 @@ class Results:
         """
         user_meta1 = message.find("div", class_="message-userDetails")
         user_meta2 = user_meta1.find("a", class_="username")
-        id = user_meta2["data-user-id"]
-        username = user_meta2.text
-        role = ", ".join([t.text for t in user_meta1.select('[itemprop="jobTitle"]')])
+        # Guest accounts have no user data
+        if user_meta2:
+            id = user_meta2["data-user-id"]
+            username = user_meta2.text
+            role = ", ".join([t.text for t in user_meta1.select('[itemprop="jobTitle"]')])
 
-        user_data1 = message.find("div", class_="message-userExtras")
-        user_data2 = user_data1.find_all("dd")
-        join_date = self._parse_datetime_user(user_data2[0].text)
-        messages = self._clean_number(user_data2[1].text)
-        reaction_score = self._clean_number(user_data2[2].text)
-        points = self._clean_number(user_data2[3].text)
+            user_data1 = message.find("div", class_="message-userExtras")
+            user_data2 = user_data1.find_all("dd")
+            join_date = self._parse_datetime_user(user_data2[0].text)
+            messages = self._clean_number(user_data2[1].text)
+            reaction_score = self._clean_number(user_data2[2].text)
+            points = self._clean_number(user_data2[3].text)
 
-        user_data = {
-            "id": id,
-            "username": username,
-            "role": role,
-            "join_date": join_date,
-            "messages": messages,
-            "reaction_score": reaction_score,
-            "points": points,
-        }
+            user_data = {
+                "id": id,
+                "username": username,
+                "role": role,
+                "join_date": join_date,
+                "messages": messages,
+                "reaction_score": reaction_score,
+                "points": points,
+            }
 
-        return user_data
+            return user_data
+        else:
+            return
 
     def _extract_posts_and_users(self, soup):
         """
@@ -299,7 +303,7 @@ class Results:
 
             post = {
                 "id": id,
-                "user_id": user["id"],
+                "user_id": user["id"] if user else None,
                 "username": meta[0],
                 "thread": self.params["title"],
                 "message": self._clean_text(post_text),
@@ -337,7 +341,8 @@ class Results:
             if config.persist:
                 for post, user in zip(posts, users):
                     models.Post.create_or_update(**post)
-                    models.User.create_or_update(**user)
+                    if user:
+                        models.User.create_or_update(**user)
             return posts, users
         if self.entity_class == "threads":
             return self._extract_threads(soup)

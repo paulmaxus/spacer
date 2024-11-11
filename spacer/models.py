@@ -72,7 +72,7 @@ class Post(BaseModel):
     """
 
     id = IntegerField(unique=True, primary_key=True)
-    user_id = ForeignKeyField(User, backref="posts")
+    user_id = ForeignKeyField(User, backref="posts", null=True)
     username = CharField(index=True)
     thread = CharField(index=True)
     message = TextField()
