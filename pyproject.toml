@@ -9,7 +9,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11"
 ]
 #license = {text = "MIT"}
-dependencies = ["requests", "urllib3", "beautifulsoup4", "peewee"]
+dependencies = ["requests", "urllib3", "beautifulsoup4", "peewee", "pandas"]
 dynamic = ["version"]
 requires-python = ">=3.8"
 
